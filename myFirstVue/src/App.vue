@@ -2,12 +2,14 @@
 import HelloWorld from './components/HelloWorld.vue'
 import TheWelcome from './components/TheWelcome.vue'
 import Test from './components/Test.vue'
+import Trang from './components/trang.vue'
 </script>
 
 <template>
     <div class="wrapper">
-      <HelloWorld msg="36 - Nguyen Thanh Truc" />
-      <Test />
+      <!-- <HelloWorld msg="36 - Nguyen Thanh Truc" />
+      <Test /> -->
+      <Trang />
     </div>
 </template>
 
