@@ -14,7 +14,7 @@
         methods: {
             changeGreeting() {
                 this.greeting = 'Hello, World!'
-                this.buttonTitle = 'Lời chào mới đã được cập nhật'
+                this.buttonTitle = 'Đã thay đổi'
             }
         }
     }
