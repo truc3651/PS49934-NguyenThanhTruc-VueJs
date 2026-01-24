@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { setItem } from '../utils/localStorage'
-import { POSTS, COMMENTS } from '../utils/constant'
-import { getAllComments, getAllPosts } from '../utils/helper'
+import { POSTS, COMMENTS, REACTIONS } from '../utils/constant'
+import { getAllComments, getAllPosts, getAllReactions } from '../utils/helper'
 import _, { find, orderBy, remove } from 'lodash'
 
 const posts = ref([])
@@ -65,6 +65,10 @@ export const usePosts = () => {
     const allComments = getAllComments()
     remove(allComments, (c) => c.postId === id)
     setItem(COMMENTS, allComments)
+
+    const allReactions = getAllReactions()
+    remove(allReactions, (r) => r.postId === id)
+    setItem(REACTIONS, allReactions)
   }
 
   return {

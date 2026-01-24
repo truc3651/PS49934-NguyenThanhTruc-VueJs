@@ -5,6 +5,7 @@ import PostDetail from '../views/PostDetail.vue'
 import CreatePost from '../views/CreatePost.vue'
 import EditPost from '../views/EditPost.vue'
 import Profile from '../views/Profile.vue'
+import AuthorProfile from '../views/AuthorProfile.vue'
 
 export const ROUTES_MAP = Object.freeze({
   HOME: {
@@ -34,6 +35,10 @@ export const ROUTES_MAP = Object.freeze({
   PROFILE: {
     path: '/profile',
     name: 'Profile'
+  },
+  AUTHOR_PROFILE: {
+    path: '/author/:id',
+    name: 'AuthorProfile'
   }
 })
 
@@ -75,6 +80,11 @@ export const ROUTES = Object.freeze([
     name: ROUTES_MAP.PROFILE.name,
     component: Profile,
     meta: { requiresAuth: true }
+  },
+  {
+    path: ROUTES_MAP.AUTHOR_PROFILE.path,
+    name: ROUTES_MAP.AUTHOR_PROFILE.name,
+    component: AuthorProfile
   }
 ])
 
@@ -82,7 +92,17 @@ export const CURRENT_USER = 'currentUser'
 export const USERS = 'users'
 export const POSTS = 'posts'
 export const COMMENTS = 'comments'
+export const REACTIONS = 'reactions'
 export const AUTH_CHANGED_EVENT_NAME = 'auth-changed'
+
+export const REACTION_TYPES = Object.freeze({
+  LIKE: { type: 'like', icon: '👍' },
+  LOVE: { type: 'love', icon: '❤️' },
+  HAHA: { type: 'haha', icon: '😂' },
+  WOW: { type: 'wow', icon: '😮' },
+  SAD: { type: 'sad', icon: '😢'},
+  ANGRY: { type: 'angry', icon: '😠' }
+})
 
 export const FALLBACK_OBJECT = '{}'
 export const FALLBACK_ARRAY = '[]'

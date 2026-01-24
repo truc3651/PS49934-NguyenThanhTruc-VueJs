@@ -1,17 +1,20 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { usePosts } from '../composables'
-import { ROUTES_MAP } from '../utils/constant'
+import { usePosts, useReactions, useAuth } from '../composables'
+import { ROUTES_MAP, REACTION_TYPES } from '../utils/constant'
 import { formatDate, truncateContent, getAuthorName } from '../utils/helper'
-import { isEmpty } from 'lodash'
+import { isEmpty, range } from 'lodash'
 
 const { posts, loadPosts } = usePosts()
+const { getReactionCount, getUserReactionForPost, toggleReaction } = useReactions()
+const { currentUser, isLoggedIn } = useAuth()
+
 const searchQuery = ref('')
+const currentPage = ref(1)
+const postsPerPage = 6
 
 const filteredPosts = computed(() => {
-  if (isEmpty(searchQuery.value)) {
-    return posts.value
-  }
+  if (isEmpty(searchQuery.value)) return posts.value
   const query = searchQuery.value.toLowerCase()
   return posts.value.filter(
     (post) =>
@@ -19,6 +22,31 @@ const filteredPosts = computed(() => {
       post.content.toLowerCase().includes(query)
   )
 })
+
+const totalPages = computed(() => Math.ceil(filteredPosts.value.length / postsPerPage))
+
+const paginatedPosts = computed(() => {
+  const start = (currentPage.value - 1) * postsPerPage
+  return filteredPosts.value.slice(start, start + postsPerPage)
+})
+
+const pageNumbers = computed(() => range(1, totalPages.value + 1))
+
+const getUserReaction = (postId) => {
+  if (isLoggedIn.value)
+    return getUserReactionForPost(postId, currentUser.value.id)
+}
+
+const handleReaction = (postId, type) => {
+  if (isLoggedIn.value) {
+    toggleReaction(postId, currentUser.value.id, type)
+    loadPosts()
+  }
+}
+
+const resetPagination = () => {
+  currentPage.value = 1
+}
 
 onMounted(() => {
   loadPosts()
@@ -47,6 +75,7 @@ onMounted(() => {
             class="form-control"
             placeholder="Search posts..."
             v-model="searchQuery"
+            @input="resetPagination"
           />
         </div>
       </div>
@@ -63,7 +92,7 @@ onMounted(() => {
 
     <div class="row">
       <div
-        v-for="post in filteredPosts"
+        v-for="post in paginatedPosts"
         :key="post.id"
         class="col-md-6 col-lg-4 mb-4"
       >
@@ -91,12 +120,32 @@ onMounted(() => {
             <div class="mt-auto">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <small class="text-muted">
-                  By {{ getAuthorName(post.authorId) }}
+                  By <router-link
+                    :to="{ name: ROUTES_MAP.AUTHOR_PROFILE.name, params: { id: post.authorId } }"
+                    class="text-decoration-none author-link"
+                  >{{ getAuthorName(post.authorId) }}</router-link>
                 </small>
                 <small class="text-muted">
                   {{ formatDate(post.createdAt) }}
                 </small>
               </div>
+
+              <div class="d-flex align-items-center gap-1 mb-2">
+                <button
+                  v-for="(reaction, key) in REACTION_TYPES"
+                  :key="key"
+                  class="btn btn-sm btn-outline-secondary reaction-btn"
+                  :class="{ 'btn-outline-info': getUserReaction(post.id)?.type === reaction.type }"
+                  :disabled="!isLoggedIn"
+                  @click="handleReaction(post.id, reaction.type)"
+                >
+                  {{ reaction.icon }}
+                  <span>
+                    {{ getReactionCount(post.id, reaction.type) || '' }}
+                  </span>
+                </button>
+              </div>
+
               <router-link
                 :to="{ name: ROUTES_MAP.POST_DETAIL.name, params: { id: post.id } }"
                 class="btn btn-outline-primary btn-sm w-100"
@@ -108,5 +157,43 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <nav v-if="totalPages > 1" class="mt-4">
+      <ul class="pagination justify-content-center">
+        <li class="page-item" :class="{ disabled: currentPage === 1 }">
+          <a class="page-link" href="#" @click.prevent="currentPage--">Previous</a>
+        </li>
+        <li
+          v-for="page in pageNumbers"
+          :key="page"
+          class="page-item"
+          :class="{ active: currentPage === page }"
+        >
+          <a class="page-link" href="#" @click.prevent="currentPage = page">{{ page }}</a>
+        </li>
+        <li class="page-item" :class="{ disabled: currentPage === totalPages }">
+          <a class="page-link" href="#" @click.prevent="currentPage++">Next</a>
+        </li>
+      </ul>
+      <p class="text-center text-muted small">
+        Page {{ currentPage }} of {{ totalPages }} ({{ filteredPosts.length }} posts)
+      </p>
+    </nav>
   </div>
 </template>
+
+<style scoped>
+.reaction-btn {
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.author-link {
+  color: #0d6efd;
+  font-weight: 500;
+}
+
+.author-link:hover {
+  text-decoration: underline !important;
+}
+</style>

@@ -1,20 +1,33 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuth, usePosts, useComments } from '../composables'
-import { ROUTES_MAP } from '../utils/constant'
+import { useAuth, usePosts, useComments, useReactions } from '../composables'
+import { ROUTES_MAP, REACTION_TYPES } from '../utils/constant'
 import { formatDate, getAuthorName } from '../utils/helper'
 import { isEmpty } from 'lodash'
 
 const route = useRoute()
 const router = useRouter()
 
-const { currentUser } = useAuth()
+const { currentUser, isLoggedIn } = useAuth()
 const { loadPostById, deletePostById } = usePosts()
 const { comments, loadCommentsByPostId, addComment } = useComments()
+const { getReactionCount, getUserReactionForPost, toggleReaction } = useReactions()
 
 const post = ref(null)
 const newComment = ref('')
+
+const getUserReaction = () => {
+  if (isLoggedIn.value && post.value)
+    return getUserReactionForPost(post.value.id, currentUser.value.id)
+}
+
+const handleReaction = (type) => {
+  if (isLoggedIn.value && post.value) {
+    toggleReaction(post.value.id, currentUser.value.id, type)
+    loadPost()
+  }
+}
 
 const isAuthor = computed(() => {
   return currentUser.value && post.value && post.value.authorId === currentUser.value.id
@@ -78,12 +91,29 @@ onMounted(() => {
             <div class="card-body">
               <h1 class="card-title">{{ post.title }}</h1>
 
-              <div class="d-flex justify-content-between align-items-center mb-3">
+              <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                 <div class="text-muted">
                   <small>
-                    By <strong>{{ getAuthorName(post.authorId) }}</strong>
+                    By <router-link
+                      :to="{ name: ROUTES_MAP.AUTHOR_PROFILE.name, params: { id: post.authorId } }"
+                      class="text-decoration-none fw-bold"
+                    >{{ getAuthorName(post.authorId) }}</router-link>
                     &bull; {{ formatDate(post.createdAt) }}
                   </small>
+                </div>
+
+                <div class="d-flex align-items-center gap-1">
+                  <button
+                    v-for="(reaction, key) in REACTION_TYPES"
+                    :key="key"
+                    class="btn btn-sm btn-outline-secondary"
+                    :class="{ 'btn-outline-info': getUserReaction()?.type === reaction.type }"
+                    :disabled="!isLoggedIn"
+                    @click="handleReaction(reaction.type)"
+                  >
+                    {{ reaction.icon }}
+                    <span>{{ getReactionCount(post.id, reaction.type) || '' }}</span>
+                  </button>
                 </div>
 
                 <div v-if="isAuthor">
@@ -146,8 +176,11 @@ onMounted(() => {
             >
               <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start mb-2">
-                  <h6 class="card-subtitle text-primary mb-0">
-                    {{ getAuthorName(comment.authorId) }}
+                  <h6 class="card-subtitle mb-0">
+                    <router-link
+                      :to="{ name: ROUTES_MAP.AUTHOR_PROFILE.name, params: { id: comment.authorId } }"
+                      class="text-primary text-decoration-none"
+                    >{{ getAuthorName(comment.authorId) }}</router-link>
                   </h6>
                   <small class="text-muted">
                     {{ formatDate(comment.createdAt) }}
