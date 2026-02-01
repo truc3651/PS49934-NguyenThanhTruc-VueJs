@@ -1,28 +1,28 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuth } from '../composables'
+import { useAuth, useAlert, useLoading } from '../composables'
 import { ROUTES_MAP } from '../utils/constant'
 
 const router = useRouter()
 const { login } = useAuth()
+const { showError } = useAlert()
+const { isLoading, withLoading } = useLoading()
 
 const form = ref({
   email: '',
   password: ''
 })
-const errorMessage = ref('')
 
-const handleSubmit = () => {
-  errorMessage.value = ''
-  const result = login(form.value.email, form.value.password)
+const handleSubmit = () => withLoading(async () => {
+  const result = await login(form.value.email, form.value.password)
 
-  if (result.error) {
-    errorMessage.value = result.error
+  if (result?.errorMessage) {
+    showError(result.errorMessage)
     return
   }
   router.push({ name: ROUTES_MAP.HOME.name })
-}
+})
 </script>
 
 <template>
@@ -33,10 +33,6 @@ const handleSubmit = () => {
           <div class="card-body p-4">
             <h2 class="card-title text-center mb-4">Login</h2>
 
-            <div v-if="errorMessage" class="alert alert-danger" role="alert">
-              {{ errorMessage }}
-            </div>
-
             <form @submit.prevent="handleSubmit">
               <div class="mb-3">
                 <label for="email" class="form-label">Email</label>
@@ -46,6 +42,7 @@ const handleSubmit = () => {
                   id="email"
                   v-model="form.email"
                   required
+                  :disabled="isLoading"
                 />
               </div>
 
@@ -57,12 +54,14 @@ const handleSubmit = () => {
                   id="password"
                   v-model="form.password"
                   required
+                  :disabled="isLoading"
                 />
               </div>
 
               <div class="d-grid">
-                <button type="submit" class="btn btn-primary">
-                  Login
+                <button type="submit" class="btn btn-primary" :disabled="isLoading">
+                  <span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                  {{ isLoading ? 'Logging in...' : 'Login' }}
                 </button>
               </div>
             </form>

@@ -1,14 +1,13 @@
 <script setup>
-import { onMounted } from 'vue';
-import { useAuth } from '../composables';
-import { ROUTES_MAP, AUTH_CHANGED_EVENT_NAME } from '../utils/constant';
+import { onMounted } from 'vue'
+import { useAuth } from '../composables'
+import { ROUTES_MAP } from '../utils/constant'
 
-const { currentUser, isLoggedIn, loadCurrentUser, logout } = useAuth();
+const { currentUser, isLoggedIn, loadCurrentUser, logout } = useAuth()
 
-onMounted(() => {
-  loadCurrentUser();
-  window.addEventListener(AUTH_CHANGED_EVENT_NAME, loadCurrentUser);
-});
+onMounted(async () => {
+  await loadCurrentUser()
+})
 </script>
 
 <template>
@@ -53,7 +52,7 @@ onMounted(() => {
                 class="nav-link"
                 :to="{ name: ROUTES_MAP.PROFILE.name }"
               >
-                <span class="me-1">{{ currentUser?.name }}</span>
+                <span class="me-1">{{ currentUser.name }}</span>
               </router-link>
             </li>
             <li class="nav-item">

@@ -1,55 +1,92 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { usePosts, useReactions, useAuth } from '../composables'
-import { ROUTES_MAP, REACTION_TYPES } from '../utils/constant'
-import { formatDate, truncateContent, getAuthorName } from '../utils/helper'
-import { isEmpty, range } from 'lodash'
+import { ref, onMounted, watch } from 'vue'
+import { isEmpty, debounce } from 'lodash'
+import { usePosts, useReactions, useAuth, useAlert, useLoading } from '../composables'
+import { ROUTES_MAP, REACTION_TYPES, ITEMS_PER_PAGE } from '../utils/constant'
+import { formatDate, truncateContent } from '../utils/helper'
+import Pagination from '../components/Pagination.vue'
+import { usePagination } from '../composables/usePagination'
 
-const { posts, loadPosts } = usePosts()
-const { getReactionCount, getUserReactionForPost, toggleReaction } = useReactions()
+const { loadPosts, countPosts } = usePosts()
+const { getUserReactionForPost, toggleReaction } = useReactions()
 const { currentUser, isLoggedIn } = useAuth()
+const { showError } = useAlert()
+const {
+  currentPage,
+  totalCount,
+  totalPages,
+  pageNumbers,
+  goToPage,
+  goToNextPage,
+  goToPreviousPage,
+  resetPagination,
+  setTotalCount
+} = usePagination(ITEMS_PER_PAGE)
+const { isLoading, withLoading } = useLoading(true)
 
+const posts = ref([])
 const searchQuery = ref('')
-const currentPage = ref(1)
-const postsPerPage = 6
+const userReactions = ref({})
 
-const filteredPosts = computed(() => {
-  if (isEmpty(searchQuery.value)) return posts.value
-  const query = searchQuery.value.toLowerCase()
-  return posts.value.filter(
-    (post) =>
-      post.title.toLowerCase().includes(query) ||
-      post.content.toLowerCase().includes(query)
-  )
+const loadPostsData = (page = 1, query) => withLoading(async () => {
+  const [postsResult, countResult] = await Promise.all([
+    loadPosts(page, ITEMS_PER_PAGE, query),
+    countPosts(query)
+  ])
+
+  if (postsResult?.errorMessage) {
+    showError(postsResult.errorMessage)
+    return
+  }
+  if (countResult?.errorMessage) {
+    showError(countResult.errorMessage)
+    return
+  }
+
+  posts.value = postsResult.data
+  setTotalCount(countResult.data)
 })
 
-const totalPages = computed(() => Math.ceil(filteredPosts.value.length / postsPerPage))
-
-const paginatedPosts = computed(() => {
-  const start = (currentPage.value - 1) * postsPerPage
-  return filteredPosts.value.slice(start, start + postsPerPage)
-})
-
-const pageNumbers = computed(() => range(1, totalPages.value + 1))
-
-const getUserReaction = (postId) => {
-  if (isLoggedIn.value)
-    return getUserReactionForPost(postId, currentUser.value.id)
-}
-
-const handleReaction = (postId, type) => {
-  if (isLoggedIn.value) {
-    toggleReaction(postId, currentUser.value.id, type)
-    loadPosts()
+const loadUserReactionsData = async () => {
+  if (!isLoggedIn.value) return
+  for (const post of posts.value) {
+    loadUserReactionData(post.id)
   }
 }
 
-const resetPagination = () => {
-  currentPage.value = 1
+const loadUserReactionData = async (postId) => {
+  if (!isLoggedIn.value) return
+  const userReaction = await getUserReactionForPost(postId, currentUser.value.id)
+  if (userReaction?.errorMessage) {
+    showError(userReaction.errorMessage)
+    return
+  }
+  userReactions.value[postId] = userReaction.data
 }
 
-onMounted(() => {
-  loadPosts()
+const handleReaction = async (postId, type) => {
+  if (!isLoggedIn.value) return
+  const toggleResult = await toggleReaction(postId, currentUser.value.id, type)
+  if (toggleResult?.errorMessage) {
+    showError(toggleResult.errorMessage)
+    return
+  }
+  loadPostsData()
+  loadUserReactionData(postId)
+}
+
+const debouncedSearch = debounce((query) => {
+  resetPagination()
+  loadPostsData(1, query)
+}, 500)
+
+watch(searchQuery, (newQuery) => {
+  debouncedSearch(newQuery)
+})
+
+onMounted(async () => {
+  await loadPostsData()
+  await loadUserReactionsData()
 })
 </script>
 
@@ -75,13 +112,18 @@ onMounted(() => {
             class="form-control"
             placeholder="Search posts..."
             v-model="searchQuery"
-            @input="resetPagination"
           />
         </div>
       </div>
     </div>
 
-    <div v-if="isEmpty(filteredPosts)" class="row">
+    <div v-if="isLoading" class="text-center py-5">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+    </div>
+
+    <div v-else-if="isEmpty(posts)" class="row">
       <div class="col-12">
         <div class="alert alert-info" role="alert">
           <span v-if="!!searchQuery">No posts found matching "{{ searchQuery }}"</span>
@@ -90,40 +132,30 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="row">
+    <div v-else class="row">
       <div
-        v-for="post in paginatedPosts"
+        v-for="post in posts"
         :key="post.id"
         class="col-md-6 col-lg-4 mb-4"
       >
         <div class="card h-100 shadow-sm">
           <img
-            v-if="post.image"
             :src="post.image"
             class="card-img-top"
             :alt="post.title"
             style="height: 200px; object-fit: cover;"
           />
-          <div
-            v-else
-            class="card-img-top bg-secondary d-flex align-items-center justify-content-center"
-            style="height: 200px;"
-          >
-            <span class="text-white">No Image</span>
-          </div>
 
           <div class="card-body d-flex flex-column">
             <h5 class="card-title">{{ post.title }}</h5>
-            <p class="card-text text-muted flex-grow-1">
-              {{ truncateContent(post.content) }}
-            </p>
+            <div class="card-text text-muted flex-grow-1 post-content" v-html="truncateContent(post.content, 150)"></div>
             <div class="mt-auto">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <small class="text-muted">
                   By <router-link
                     :to="{ name: ROUTES_MAP.AUTHOR_PROFILE.name, params: { id: post.authorId } }"
                     class="text-decoration-none author-link"
-                  >{{ getAuthorName(post.authorId) }}</router-link>
+                  >{{ post.author.name }}</router-link>
                 </small>
                 <small class="text-muted">
                   {{ formatDate(post.createdAt) }}
@@ -135,13 +167,13 @@ onMounted(() => {
                   v-for="(reaction, key) in REACTION_TYPES"
                   :key="key"
                   class="btn btn-sm btn-outline-secondary reaction-btn"
-                  :class="{ 'btn-outline-info': getUserReaction(post.id)?.type === reaction.type }"
+                  :class="{ 'btn-secondary': userReactions[post.id]?.type === reaction.type }"
                   :disabled="!isLoggedIn"
                   @click="handleReaction(post.id, reaction.type)"
                 >
                   {{ reaction.icon }}
-                  <span>
-                    {{ getReactionCount(post.id, reaction.type) || '' }}
+                  <span :class="{ 'text-white': userReactions[post.id]?.type === reaction.type }">
+                    {{ post.reactions[reaction.type] }}
                   </span>
                 </button>
               </div>
@@ -158,27 +190,16 @@ onMounted(() => {
       </div>
     </div>
 
-    <nav v-if="totalPages > 1" class="mt-4">
-      <ul class="pagination justify-content-center">
-        <li class="page-item" :class="{ disabled: currentPage === 1 }">
-          <a class="page-link" href="#" @click.prevent="currentPage--">Previous</a>
-        </li>
-        <li
-          v-for="page in pageNumbers"
-          :key="page"
-          class="page-item"
-          :class="{ active: currentPage === page }"
-        >
-          <a class="page-link" href="#" @click.prevent="currentPage = page">{{ page }}</a>
-        </li>
-        <li class="page-item" :class="{ disabled: currentPage === totalPages }">
-          <a class="page-link" href="#" @click.prevent="currentPage++">Next</a>
-        </li>
-      </ul>
-      <p class="text-center text-muted small">
-        Page {{ currentPage }} of {{ totalPages }} ({{ filteredPosts.length }} posts)
-      </p>
-    </nav>
+    <Pagination
+      :current-page="currentPage"
+      :total-pages="totalPages"
+      :page-numbers="pageNumbers"
+      :total-count="totalCount"
+      item-label="posts"
+      @go-to-page="(page) => goToPage(page, () => loadPostsData(page, searchQuery.value))"
+      @previous="goToPreviousPage(() => loadPostsData(currentPage, searchQuery))"
+      @next="goToNextPage(() => loadPostsData(currentPage, searchQuery))"
+    />
   </div>
 </template>
 

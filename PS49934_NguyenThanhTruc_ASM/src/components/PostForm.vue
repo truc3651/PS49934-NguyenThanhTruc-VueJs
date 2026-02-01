@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue'
+import { QuillEditor } from '@vueup/vue-quill'
 
 const props = defineProps({
   initialData: {
@@ -10,13 +11,9 @@ const props = defineProps({
       image: ''
     })
   },
-  submitLabel: {
-    type: String,
-    default: 'Submit'
-  },
-  errorMessage: {
-    type: String,
-    default: ''
+  isLoading: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -27,6 +24,41 @@ const form = ref({
   content: props.initialData.content ?? '',
   image: props.initialData.image ?? ''
 })
+
+const quillEditor = ref(null)
+
+const editorOptions = {
+  modules: {
+    toolbar: {
+      container: [
+        ['bold', 'italic', 'underline', 'strike'],
+        ['blockquote', 'code-block'],
+        [{ 'header': 1 }, { 'header': 2 }],
+        [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+        [{ 'indent': '-1' }, { 'indent': '+1' }],
+        [{ 'color': [] }, { 'background': [] }],
+        [{ 'align': [] }],
+        ['link', 'image'],
+        ['clean']
+      ],
+      handlers: {
+        image: imageHandler
+      }
+    }
+  },
+  placeholder: 'Write your content here...'
+}
+
+function imageHandler() {
+  const url = prompt('Enter image URL:')
+  
+  if (url) {
+    const quill = quillEditor.value.getQuill()
+    const range = quill.getSelection(true)
+    quill.insertEmbed(range.index, 'image', url, 'user')
+    quill.setSelection(range.index + 1)
+  }
+}
 
 watch(
   () => props.initialData,
@@ -47,10 +79,6 @@ const handleSubmit = () => {
 
 <template>
   <form @submit.prevent="handleSubmit">
-    <div v-if="errorMessage" class="alert alert-danger" role="alert">
-      {{ errorMessage }}
-    </div>
-
     <div class="mb-3">
       <label for="title" class="form-label">Title</label>
       <input
@@ -59,32 +87,39 @@ const handleSubmit = () => {
         id="title"
         v-model="form.title"
         required
+        :disabled="isLoading"
       />
     </div>
 
     <div class="mb-3">
-      <label for="content" class="form-label">Content</label>
-      <textarea
-        class="form-control"
-        id="content"
-        rows="10"
-        v-model="form.content"
-        required
-      ></textarea>
+      <label class="form-label">Content</label>
+      <div style="min-height: 500px;">
+        <QuillEditor
+          ref="quillEditor"
+          v-model:content="form.content"
+          content-type="html"
+          theme="snow"
+          :options="editorOptions"
+          :disabled="isLoading"
+          style="height: 450px;"
+        />
+      </div>
     </div>
 
     <div class="mb-3">
-      <label for="image" class="form-label">Image URL (optional)</label>
+      <label for="image" class="form-label">Featured Image URL</label>
       <input
         type="url"
         class="form-control"
         id="image"
         v-model="form.image"
+        required
+        :disabled="isLoading"
       />
     </div>
 
     <div v-if="form.image" class="mb-3">
-      <label class="form-label">Image Preview</label>
+      <label class="form-label">Featured Image Preview</label>
       <div>
         <img
           :src="form.image"
@@ -96,9 +131,6 @@ const handleSubmit = () => {
     </div>
 
     <slot name="actions">
-      <button type="submit" class="btn btn-primary">
-        {{ submitLabel }}
-      </button>
     </slot>
   </form>
 </template>

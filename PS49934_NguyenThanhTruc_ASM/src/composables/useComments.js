@@ -1,40 +1,36 @@
-import { ref } from 'vue'
-import { setItem } from '../utils/localStorage'
-import { COMMENTS } from '../utils/constant'
-import { getAllComments } from '../utils/helper'
-import _ from 'lodash'
-
-const comments = ref([])
+import { Result } from '../dtos/Result'
+import { supabase } from '../libs/supabaseClient'
+import { DATABASE_CONFIG } from '../utils/constant'
 
 export const useComments = () => {
-  const loadCommentsByPostId = (postId) => {
-    const allComments = getAllComments()
-    comments.value = _(allComments)
-        .filter(c => c.postId === postId)
-        .orderBy(['createdAt', ['desc']])
-        .value()
-  }
-
-  const addComment = (postId, authorId, content) => {
-    const newComment = {
-      id: Date.now(),
-      postId: parseInt(postId),
-      authorId,
-      content,
-      createdAt: Date.now(),
+  const addComment = async (postId, userId, content, parentId) => {
+    const insertData = {
+      post_id: parseInt(postId),
+      user_id: userId,
+      content
+    }
+    if (parentId) {
+      insertData.parent_id = parseInt(parentId)
     }
 
-    const allComments = getAllComments()
-    allComments.push(newComment)
-    setItem(COMMENTS, allComments)
+    const { _, error } = await supabase
+      .from(DATABASE_CONFIG.COMMENTS.table)
+      .insert(insertData)
+      .select(`
+        ${DATABASE_CONFIG.ALL},
+        user:${DATABASE_CONFIG.PROFILES.table}!${DATABASE_CONFIG.COMMENTS.fields.USER_ID} (
+          ${DATABASE_CONFIG.PROFILES.fields.ID},
+          ${DATABASE_CONFIG.PROFILES.fields.NAME}
+        )
+      `)
+      .single()
 
-    comments.value.unshift(newComment)
-    return newComment
+    if(error) {
+      return Result.fail(error.message)
+    }
   }
 
   return {
-    comments,
-    loadCommentsByPostId,
     addComment
   }
 }

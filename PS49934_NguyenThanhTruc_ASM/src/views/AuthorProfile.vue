@@ -1,40 +1,80 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { usePosts, useReactions } from '../composables'
-import { ROUTES_MAP } from '../utils/constant'
-import { formatDate, truncateContent, getAuthorById } from '../utils/helper'
 import { isEmpty } from 'lodash'
+import { useAuth, usePosts, useAlert, useLoading, useReactions } from '../composables'
+import { ITEMS_PER_PAGE, ROUTES_MAP } from '../utils/constant'
+import { formatDate, truncateContent } from '../utils/helper'
+import { usePagination } from '../composables/usePagination'
+import Pagination from '../components/Pagination.vue'
 
 const route = useRoute()
 const router = useRouter()
 
-const { loadPostsByAuthorId } = usePosts()
-const { getTotalReactionCountsByPostId } = useReactions()
+const { getAuthorById } = useAuth()
+const { loadPostsByAuthorId, countPostsByAuthorId } = usePosts()
+const { countReactionsByAuthorId } = useReactions()
+const { showError } = useAlert()
+const {
+  currentPage,
+  totalCount,
+  totalPages,
+  pageNumbers,
+  goToPage,
+  goToNextPage,
+  goToPreviousPage,
+  setTotalCount
+} = usePagination(ITEMS_PER_PAGE)
+const { isLoading, withLoading } = useLoading(true)
 
 const author = ref(null)
 const authorPosts = ref([])
+const totalPosts = ref(0)
+const totalReactions = ref(0)
 
-const totalPosts = computed(() => authorPosts.value.length)
-const totalReactions = computed(() => {
-  return authorPosts.value.reduce((sum, post) => {
-    return sum + getTotalReactionCountsByPostId(post.id)
-  }, 0)
-})
+const loadAuthorData = () => withLoading(async () => {
+  const authorId = route.params?.id
+  const authorResult = await getAuthorById(authorId)
 
-const loadAuthorData = () => {
-  const authorId = parseInt(route.params?.id)
-  author.value = getAuthorById(authorId)
-
-  if (isEmpty(author.value)) {
+  if (authorResult.errorMessage) {
+    showError(authorResult.errorMessage)
     router.push({ name: ROUTES_MAP.HOME.name })
     return
   }
-  authorPosts.value = loadPostsByAuthorId(authorId)
+  author.value = authorResult.data
+
+  if (isEmpty(author.value)) {
+    showError('Author not found')
+    router.push({ name: ROUTES_MAP.HOME.name })
+    return
+  }
+
+  await loadPostsCount()
+  await loadPostsData(currentPage.value)
+  await loadReactionsCount()  
+})
+
+const loadPostsCount = async () => {
+  const postsCountResult = await countPostsByAuthorId(author.value.id)
+  if (postsCountResult.errorMessage) showError(postsCountResult.errorMessage)
+  totalPosts.value = postsCountResult.data
+  setTotalCount(postsCountResult.data)
 }
 
-onMounted(() => {
-  loadAuthorData()
+const loadPostsData = async (page) => {
+  const result = await loadPostsByAuthorId(author.value.id, page, ITEMS_PER_PAGE)
+  if (result.errorMessage) showError(result.errorMessage)
+  authorPosts.value = result.data
+}
+
+const loadReactionsCount = async () => {
+  const reactionsCountResult = await countReactionsByAuthorId(author.value.id)
+  if (reactionsCountResult.errorMessage) showError(reactionsCountResult.errorMessage)
+  totalReactions.value = reactionsCountResult.data
+}
+
+onMounted(async () => {
+  await loadAuthorData()
 })
 </script>
 
@@ -46,7 +86,13 @@ onMounted(() => {
       </router-link>
     </div>
 
-    <div v-if="author" class="row">
+    <div v-if="isLoading" class="text-center py-5">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+    </div>
+
+    <div v-else-if="author" class="row">
       <div class="col-lg-4 mb-4">
         <div class="card shadow">
           <div class="card-body text-center">
@@ -104,8 +150,7 @@ onMounted(() => {
 
               <div class="card-body d-flex flex-column">
                 <h6 class="card-title">{{ post.title }}</h6>
-                <p class="card-text text-muted small flex-grow-1">
-                  {{ truncateContent(post.content, 100) }}
+                <p class="card-text text-muted small flex-grow-1" v-html="truncateContent(post.content, 100)">
                 </p>
                 <div class="mt-auto">
                   <div class="d-flex justify-content-between align-items-center mb-2">
@@ -113,7 +158,7 @@ onMounted(() => {
                       {{ formatDate(post.createdAt) }}
                     </small>
                     <span class="badge bg-light text-dark">
-                      {{ getTotalReactionCountsByPostId(post.id) }} reactions
+                      {{ Object.values(post.reactions).filter(value => value !== 0).length }} reactions
                     </span>
                   </div>
                   <router-link
@@ -126,6 +171,16 @@ onMounted(() => {
               </div>
             </div>
           </div>
+          <Pagination
+            :current-page="currentPage"
+            :total-pages="totalPages"
+            :page-numbers="pageNumbers"
+            :total-count="totalCount"
+            item-label="posts"
+            @go-to-page="(page) => goToPage(page, () => loadPostsData(page))"
+            @previous="goToPreviousPage(() => loadPostsData(currentPage))"
+            @next="goToNextPage(() => loadPostsData(currentPage))"
+          />
         </div>
       </div>
     </div>

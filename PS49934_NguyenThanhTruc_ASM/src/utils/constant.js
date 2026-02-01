@@ -88,21 +88,68 @@ export const ROUTES = Object.freeze([
   }
 ])
 
-export const CURRENT_USER = 'currentUser'
-export const USERS = 'users'
-export const POSTS = 'posts'
-export const COMMENTS = 'comments'
-export const REACTIONS = 'reactions'
-export const AUTH_CHANGED_EVENT_NAME = 'auth-changed'
-
 export const REACTION_TYPES = Object.freeze({
-  LIKE: { type: 'like', icon: '👍' },
-  LOVE: { type: 'love', icon: '❤️' },
-  HAHA: { type: 'haha', icon: '😂' },
-  WOW: { type: 'wow', icon: '😮' },
-  SAD: { type: 'sad', icon: '😢'},
-  ANGRY: { type: 'angry', icon: '😠' }
+  LIKE: { type: 'LIKE', icon: '👍' },
+  LOVE: { type: 'LOVE', icon: '❤️' },
+  HAHA: { type: 'HAHA', icon: '😂' },
+  WOW: { type: 'WOW', icon: '😮' },
+  SAD: { type: 'SAD', icon: '😢'},
+  ANGRY: { type: 'ANGRY', icon: '😠' }
 })
 
 export const FALLBACK_OBJECT = '{}'
 export const FALLBACK_ARRAY = '[]'
+
+export const DATABASE_CONFIG = Object.freeze({
+  ALL: '*',
+  PROFILES: {
+    table: 'profiles',
+    fields: {
+      ID: 'id',
+      NAME: 'name',
+      EMAIL: 'email',
+      AVATAR: 'avatar',
+      PASSWORD: 'password',
+      CREATED_AT: 'created_at',
+      UPDATED_AT: 'updated_at'
+    }
+  },
+  POSTS: {
+    table: 'posts',
+    fields: {
+      ID: 'id',
+      TITLE: 'title',
+      CONTENT: 'content',
+      IMAGE: 'image',
+      AUTHOR_ID: 'author_id',
+      CREATED_AT: 'created_at',
+      UPDATED_AT: 'updated_at'
+    }
+  },
+  COMMENTS: {
+    table: 'comments',
+    fields: {
+      ID: 'id',
+      POST_ID: 'post_id',
+      USER_ID: 'user_id',
+      PARENT_ID: 'parent_id',
+      CONTENT: 'content',
+      CREATED_AT: 'created_at',
+    }
+  },
+  REACTIONS: {
+    table: 'reactions',
+    fields: {
+      ID: 'id',
+      POST_ID: 'post_id',
+      USER_ID: 'user_id',
+      TYPE: 'type',
+      CREATED_AT: 'created_at',
+    }
+  },
+  FUNCTIONS: {
+    COUNT_REACTIONS_GROUP_BY_TYPE: 'count_reactions_group_by_type'
+  }
+})
+
+export const ITEMS_PER_PAGE = 6

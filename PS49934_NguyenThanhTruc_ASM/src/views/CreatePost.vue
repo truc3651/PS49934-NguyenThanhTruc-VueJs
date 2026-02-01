@@ -1,7 +1,6 @@
 <script setup>
-import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuth, usePosts } from '../composables'
+import { useAuth, usePosts, useAlert, useLoading } from '../composables'
 import { ROUTES_MAP } from '../utils/constant'
 import PostForm from '../components/PostForm.vue'
 import { isEmpty } from 'lodash'
@@ -9,38 +8,41 @@ import { isEmpty } from 'lodash'
 const router = useRouter()
 const { currentUser } = useAuth()
 const { createPost } = usePosts()
+const { showError, showSuccess } = useAlert()
+const { isLoading, withLoading } = useLoading()
 
-const errorMessage = ref('')
-
-const handleSubmit = (formData) => {
-  errorMessage.value = ''
-  const {
-    title,
-    content,
-    image
-  } = formData
+const handleSubmit = async (formData) => {
+  const { title, content, image } = formData
 
   if (isEmpty(title)) {
-    errorMessage.value = 'Title is required'
+    showError('Title is required')
     return
   }
   if (isEmpty(content)) {
-    errorMessage.value = 'Content is required'
+    showError('Content is required')
     return
   }
   if (isEmpty(image)) {
-    errorMessage.value = 'Image is required'
+    showError('Image is required')
     return
   }
 
-  const newPost = createPost({
-    title: title.trim(),
-    content: content.trim(),
-    image: image,
-    authorId: currentUser.value.id
-  })
+  await withLoading(async () => {
+    const result = await createPost({
+      title: title.trim(),
+      content: content.trim(),
+      image: image,
+      authorId: currentUser.value.id
+    })
 
-  router.push({ name: ROUTES_MAP.POST_DETAIL.name, params: { id: newPost.id } })
+    if (result?.errorMessage) {
+      showError(result.errorMessage)
+      return
+    }
+
+    showSuccess('Post created successfully')
+    router.push({ name: ROUTES_MAP.POST_DETAIL.name, params: { id: result.data.id } })
+  })
 }
 </script>
 
@@ -59,14 +61,15 @@ const handleSubmit = (formData) => {
             <h2 class="card-title mb-4">Create New Post</h2>
 
             <PostForm
-              :error-message="errorMessage"
+              :is-loading="isLoading"
               submit-label="Create Post"
               @submit="handleSubmit"
             >
               <template #actions>
                 <div class="d-flex gap-2">
-                  <button type="submit" class="btn btn-primary">
-                    Create Post
+                  <button type="submit" class="btn btn-primary" :disabled="isLoading">
+                    <span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    {{ isLoading ? 'Creating...' : 'Create Post' }}
                   </button>
                   <router-link :to="{ name: ROUTES_MAP.HOME.name }" class="btn btn-outline-secondary">
                     Cancel

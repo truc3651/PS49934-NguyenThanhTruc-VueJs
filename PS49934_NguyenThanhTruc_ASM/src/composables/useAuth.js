@@ -1,76 +1,131 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { isEmpty, find } from 'lodash'
-import { getCurrentUser, getAllUsers } from '../utils/helper'
-import { setItem, removeItem } from '../utils/localStorage'
-import { CURRENT_USER, USERS, ROUTES_MAP, AUTH_CHANGED_EVENT_NAME } from '../utils/constant'
+import { isEmpty } from 'lodash'
+import { supabase } from '../libs/supabaseClient'
+import { hashPassword, comparePassword } from '../utils/password'
+import { ROUTES_MAP, DATABASE_CONFIG } from '../utils/constant'
+import { generateToken, verifyToken, removeToken } from '../utils/jwt'
+import { Result } from '../dtos/Result'
 
 const currentUser = ref(null)
 const isLoggedIn = computed(() => !isEmpty(currentUser.value))
 
 export const useAuth = () => {
   const router = useRouter()
-  
-  const loadCurrentUser = () => {
-    currentUser.value = getCurrentUser()
+
+  const loadCurrentUser = async () => {
+    try {
+      const {payload} = await verifyToken()
+      currentUser.value = toDto(payload.user)
+    } catch (error) {
+      currentUser.value = null
+      removeToken()
+      return Result.fail(error.message)
+    }
   }
 
-  const login = (email, password) => {
-    const users = getAllUsers()
-    const user = find(users, {email, password})
-    if (user) {
-      setItem(CURRENT_USER, user)
-      currentUser.value = user
-      window.dispatchEvent(new Event(AUTH_CHANGED_EVENT_NAME))
-      return { error: null }
+  const login = async (email, password) => {
+    const { data: user, error } = await supabase
+      .from(DATABASE_CONFIG.PROFILES.table)
+      .select(DATABASE_CONFIG.ALL)
+      .eq(DATABASE_CONFIG.PROFILES.fields.EMAIL, email)
+      .single()
+
+    if (error) {
+      return Result.fail(error.message)
     }
-    return { error: 'Invalid credentials' }
+
+    if (isEmpty(user)) {
+      return Result.fail('Invalid credentials')
+    }
+
+    const isValidPassword = await comparePassword(password, user.password)
+    if (!isValidPassword) {
+      return Result.fail('Invalid credentials')
+    }
+
+    const userWithoutPassword = { ...user, password: undefined }
+    await generateToken({ user: userWithoutPassword })
+    currentUser.value = userWithoutPassword
   }
 
-  const register = (name, email, password, avatar = '') => {
-    const users = getAllUsers()
-    const existingUser = find(users, {email})
-    if (existingUser) {
-      return { error: 'Email already registered' }
+  const register = async (name, email, password, avatar) => {
+    const { data: existingUsers } = await supabase
+      .from(DATABASE_CONFIG.PROFILES.table)
+      .select(DATABASE_CONFIG.PROFILES.fields.ID)
+      .eq(DATABASE_CONFIG.PROFILES.fields.EMAIL, email)
+    if (existingUsers.length) {
+      return Result.fail('Email already registered')
     }
-    const newUser = {
-      id: Date.now(),
-      name,
-      email,
-      password,
-      avatar,
-      createdAt: Date.now(),
-    }
-    users.push(newUser)
-    setItem(USERS, users)
-    return { error: null }
+
+    const hashedPassword = await hashPassword(password)
+
+    const { error } = await supabase
+      .from(DATABASE_CONFIG.PROFILES.table)
+      .insert({
+        name,
+        email,
+        password: hashedPassword,
+        avatar: avatar ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+      })
+      .select()
+      .single()
+
+      if(error) {
+        return Result.fail(error.message)
+      }
   }
 
   const logout = () => {
-    removeItem(CURRENT_USER)
+    removeToken()
     currentUser.value = null
-    window.dispatchEvent(new Event(AUTH_CHANGED_EVENT_NAME))
     router.push({ name: ROUTES_MAP.HOME.name })
   }
 
-  const updateProfile = (updates) => {
-    const users = getAllUsers()
-    const userIndex = users.findIndex((u) => u.id === currentUser.value.id)
-    if (userIndex === -1) {
-      return { error: 'User not found' }
+  const updateProfile = async (updates) => {
+    const updateData = { ...updates }
+
+    if (updates.password) {
+      updateData.password = await hashPassword(updates.password)
     }
 
-    users[userIndex] = {
-      ...users[userIndex],
-      ...updates
-    }
-    setItem(USERS, users)
-    setItem(CURRENT_USER, users[userIndex])
-    currentUser.value = users[userIndex]
-    window.dispatchEvent(new Event(AUTH_CHANGED_EVENT_NAME))
+    const { data, error } = await supabase
+      .from(DATABASE_CONFIG.PROFILES.table)
+      .update(updateData)
+      .eq(DATABASE_CONFIG.PROFILES.fields.ID, currentUser.value.id)
+      .select()
+      .single()
 
-    return { error: null }
+    if (error) {
+      return Result.fail(error.message)
+    }
+
+    const userWithoutPassword = { ...data, password: undefined }
+    await generateToken({ user: userWithoutPassword })
+    currentUser.value = {
+      ...currentUser.value,
+      ...userWithoutPassword
+    }
   }
+
+  const getAuthorById = async (authorId) => {
+    const { data, error } = await supabase
+      .from(DATABASE_CONFIG.PROFILES.table)
+      .select(DATABASE_CONFIG.ALL)
+      .eq(DATABASE_CONFIG.PROFILES.fields.ID, parseInt(authorId))
+      .single()
+
+    return error ? Result.fail(error.message) : Result.ok(toDto(data))
+  }
+
+  const toDto = (user) => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    avatar: user.avatar,
+    createdAt: new Date(user.created_at).getTime(),
+    updatedAt: user.updated_at ? new Date(user.updated_at).getTime() : null
+  })
 
   return {
     currentUser,
@@ -79,6 +134,7 @@ export const useAuth = () => {
     login,
     register,
     logout,
-    updateProfile
+    updateProfile,
+    getAuthorById
   }
 }
