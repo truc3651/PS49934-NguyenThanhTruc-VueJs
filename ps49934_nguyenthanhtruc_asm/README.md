@@ -1,5 +1,3 @@
-# PS49934-NguyenThanhTruc-VueJs
-
 ## Database schema
 ![Database schema](architecture/database.png)
 
